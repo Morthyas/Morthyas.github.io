@@ -1,55 +1,114 @@
-
 <!DOCTYPE html>
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
-  <title>Skenování</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <title>Skenování a odeslání do Google Sheets</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.7"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
-    input, button { font-size: 16px; padding: 8px; margin-top: 10px; width: 100%; }
-    label { display: block; margin-top: 15px; }
-    #reader { width: 100%; max-width: 400px; margin: 20px auto; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    #reader {
+      width: 100%;
+      max-width: 400px;
+      margin: 20px 0;
+    }
+    label {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input, button {
+      width: 100%;
+      max-width: 400px;
+      padding: 10px;
+      font-size: 1rem;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      cursor: pointer;
+      background-color: #007bff;
+      border: none;
+      color: white;
+      border-radius: 4px;
+    }
+    button:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+    #vysledek {
+      margin-top: 20px;
+      font-size: 1.1rem;
+    }
   </style>
 </head>
 <body>
-  <h2>📦 Skenování výrobku a jména</h2>
 
+  <h1>📦 Skenování výrobku a jména</h1>
+
+  <!-- Kontejner pro QR skener -->
   <div id="reader"></div>
 
+  <!-- Formulářová pole pro data -->
   <label for="vyrobek">Výrobek:</label>
-  <input type="text" id="vyrobek" autocomplete="off" readonly>
+  <input type="text" id="vyrobek" readonly>
 
   <label for="jmeno">Jméno:</label>
-  <input type="text" id="jmeno" autocomplete="off" readonly>
+  <input type="text" id="jmeno" readonly>
 
   <label for="pocet">Počet balení:</label>
   <input type="number" id="pocet" value="1" min="1">
 
-  <button onclick="odeslat()">📤 Odeslat</button>
-  <div id="vysledek" style="margin-top: 20px;"></div>
+  <button id="btn-odeslat" onclick="odeslat()" disabled>📤 Odeslat</button>
+
+  <!-- Zpráva o výsledku -->
+  <div id="vysledek"></div>
 
   <script>
+    // URL vašeho Google Sheets Web App (po redeploy)
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbySRQNc2PQ0dAjKeGFUWl0XtrX_QvUFlu8cFfKjwrWatS74jPA4A9B8gz9E9zLugI75sA/exec";
+
+    let html5QrCode;
     let aktualniPole = "vyrobek";
 
     function startScanner() {
-      const html5QrCode = new Html5Qrcode("reader");
+      document.getElementById("vysledek").innerText = "";
+      document.getElementById("btn-odeslat").disabled = true;
 
+      html5QrCode = new Html5Qrcode("reader");
       html5QrCode.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
-        qrCodeMessage => {
+        qrMessage => {
           if (aktualniPole === "vyrobek") {
-            document.getElementById("vyrobek").value = qrCodeMessage;
+            document.getElementById("vyrobek").value = qrMessage;
             aktualniPole = "jmeno";
           } else if (aktualniPole === "jmeno") {
-            document.getElementById("jmeno").value = qrCodeMessage;
+            document.getElementById("jmeno").value = qrMessage;
             aktualniPole = "hotovo";
-            html5QrCode.stop();
+            html5QrCode.stop()
+              .then(() => {
+                document.getElementById("btn-odeslat").disabled = false;
+              })
+              .catch(err => {
+                console.error("Chyba při zastavení skeneru:", err);
+              });
           }
         },
-        errorMessage => {
-          // silent error logging
+        error => {
+          // tiché logování, nemusíte nic dělat
         }
       ).catch(err => {
         document.getElementById("vysledek").innerText = "❌ Kamera selhala: " + err;
@@ -58,37 +117,50 @@
 
     function odeslat() {
       const vyrobek = document.getElementById("vyrobek").value.trim();
-      const jmeno = document.getElementById("jmeno").value.trim();
-      const pocet = document.getElementById("pocet").value;
+      const jmeno   = document.getElementById("jmeno").value.trim();
+      const pocet   = document.getElementById("pocet").value;
 
       if (!vyrobek || !jmeno) {
-        alert("Nejprve naskenuj výrobek i jméno.");
+        alert("Nejprve naskenujte výrobek i jméno.");
         return;
       }
 
       const data = { vyrobek, jmeno, pocet };
 
-      fetch("https://script.google.com/macros/s/AKfycbzFCIJscHcgk8T4NdhIfH35d3bKwcfN-gsKOLByHmr0uDZs214pXfoLPmj6WVxRbZaaUQ/exec", {
+      document.getElementById("btn-odeslat").disabled = true;
+      document.getElementById("vysledek").innerText = "⏳ Odesílám…";
+
+      fetch(WEBAPP_URL, {
         method: "POST",
-        body: JSON.stringify(data),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
       })
-      .then(res => res.text())
+      .then(response => response.text())
       .then(txt => {
-        document.getElementById("vysledek").innerText = txt === "OK" ? "✅ Úspěšně odesláno!" : "❌ Chyba: " + txt;
+        if (txt === "OK") {
+          document.getElementById("vysledek").innerText = "✅ Úspěšně odesláno!";
+        } else {
+          document.getElementById("vysledek").innerText = "❌ Chyba serveru: " + txt;
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById("vysledek").innerText = "❌ Chyba při odesílání: " + err;
+      })
+      .finally(() => {
+        // reset a restart skeneru
         document.getElementById("vyrobek").value = "";
         document.getElementById("jmeno").value = "";
         document.getElementById("pocet").value = "1";
         aktualniPole = "vyrobek";
-        document.getElementById("reader").innerHTML = "";
-        startScanner();
-      })
-      .catch(err => {
-        document.getElementById("vysledek").innerText = "❌ Chyba při odesílání: " + err;
+        document.getElementById("btn-odeslat").disabled = true;
+        html5QrCode.clear().then(() => startScanner());
       });
     }
 
-    window.onload = () => startScanner();
+    // Spustit skener při načtení stránky
+    window.addEventListener("load", startScanner);
   </script>
+
 </body>
 </html>

@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Skenování</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+    input, button { font-size: 16px; padding: 8px; margin-top: 10px; width: 100%; }
+    label { display: block; margin-top: 15px; }
+    #reader { width: 100%; max-width: 400px; margin: 20px auto; }
+  </style>
+</head>
+<body>
+  <h2>📦 Skenování výrobku a jména</h2>
+
+  <div id="reader"></div>
+
+  <label for="vyrobek">Výrobek:</label>
+  <input type="text" id="vyrobek" autocomplete="off" readonly>
+
+  <label for="jmeno">Jméno:</label>
+  <input type="text" id="jmeno" autocomplete="off" readonly>
+
+  <label for="pocet">Počet balení:</label>
+  <input type="number" id="pocet" value="1" min="1">
+
+  <button onclick="odeslat()">📤 Odeslat</button>
+  <div id="vysledek" style="margin-top: 20px;"></div>
+
+  <script>
+    let aktualniPole = "vyrobek";
+
+    function startScanner() {
+      const html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          if (aktualniPole === "vyrobek") {
+            document.getElementById("vyrobek").value = qrCodeMessage;
+            aktualniPole = "jmeno";
+          } else if (aktualniPole === "jmeno") {
+            document.getElementById("jmeno").value = qrCodeMessage;
+            aktualniPole = "hotovo";
+            html5QrCode.stop();
+          }
+        },
+        errorMessage => {
+          // silent error logging
+        }
+      ).catch(err => {
+        document.getElementById("vysledek").innerText = "❌ Kamera selhala: " + err;
+      });
+    }
+
+    function odeslat() {
+      const vyrobek = document.getElementById("vyrobek").value.trim();
+      const jmeno = document.getElementById("jmeno").value.trim();
+      const pocet = document.getElementById("pocet").value;
+
+      if (!vyrobek || !jmeno) {
+        alert("Nejprve naskenuj výrobek i jméno.");
+        return;
+      }
+
+      const data = { vyrobek, jmeno, pocet };
+
+      fetch("https://script.google.com/macros/s/AKfycbwDB7G4f2BPgkvvlB9zRUM5Te2tdtmiCu23K-pfafn1BscoWHF2yAgs9X_kWd6gOlBdaA/exec", {
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" }
+      })
+      .then(res => res.text())
+      .then(txt => {
+        document.getElementById("vysledek").innerText = txt === "OK" ? "✅ Úspěšně odesláno!" : "❌ Chyba: " + txt;
+        document.getElementById("vyrobek").value = "";
+        document.getElementById("jmeno").value = "";
+        document.getElementById("pocet").value = "1";
+        aktualniPole = "vyrobek";
+        document.getElementById("reader").innerHTML = "";
+        startScanner();
+      })
+      .catch(err => {
+        document.getElementById("vysledek").innerText = "❌ Chyba při odesílání: " + err;
+      });
+    }
+
+    window.onload = () => startScanner();
+  </script>
+</body>
+</html>
